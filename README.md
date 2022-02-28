@@ -1,4 +1,5 @@
-# 2021_Ingus_CARE_for_secondary_parotid_tumours_IA_PJ_IJ
+# CARE Parotid tumours
+
 Reporting quality of case reports about secondary parotid neoplasms from distantant metastasis assessed by CARE guidelines
 
 Data analysis script
