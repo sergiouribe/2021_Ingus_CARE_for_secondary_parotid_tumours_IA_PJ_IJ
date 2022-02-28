@@ -10,6 +10,16 @@ pacman::p_load(tidyverse,
                janitor)
 ```
 
+For wordcloud
+
+```{r}
+pacman::p_load(wordcloud, # word-cloud generator 
+               SnowballC, # for text stemming
+               RColorBrewer, # palette
+               wordcloud2, 
+               tm) # for text mining
+```
+
 ```{r}
 theme_set(theme_minimal())
 ```
@@ -98,7 +108,68 @@ df %>%
                names_to = "sex", 
                values_to = "sex_values") %>% 
   ggplot(aes(y = Age, 
-             x = sex)) + 
+             x = sex, 
+             color = sex)) + 
   geom_boxplot(alpha = .7) + 
   geom_jitter(alpha = .2, width = .2)
+```
+
+# Wordcloud
+
+```{r}
+text <- df$`Copy and paste the abstract`
+docs <- Corpus(VectorSource(text))
+```
+
+```{r}
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+```
+
+```{r}
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# specify your stopwords as a character vector
+docs <- tm_map(docs, removeWords, c("keywords")) 
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+# Text stemming
+# docs <- tm_map(docs, stemDocument)
+```
+
+```{r}
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+head(d, 10)
+```
+
+```{r}
+set.seed(1234)
+wordcloud(
+  words = d$word,
+  freq = d$freq,
+  min.freq = 35,
+  max.words = 200,
+  random.order = TRUE,
+  rot.per = 0.35,
+  colors = brewer.pal(8, "Dark2")
+)
+```
+
+```{r}
+findFreqTerms(dtm, lowfreq = 4)
+```
+
+```{r}
+findAssocs(dtm, terms = "primary", corlimit = 0.4)
 ```
