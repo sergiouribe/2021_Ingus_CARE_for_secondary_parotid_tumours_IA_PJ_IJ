@@ -1,0 +1,104 @@
+---
+title: "CARE secondary parotid tumours"
+output: html_notebook
+---
+
+```{r}
+pacman::p_load(tidyverse, 
+               gtsummary,
+               dlookr, 
+               janitor)
+```
+
+```{r}
+theme_set(theme_minimal())
+```
+
+# Dataset
+
+```{r}
+df <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRKPzFe2lbF87DNe9SBjuaIb5iMb4nCmgvfdyT4v-NjK-BZBR-HkUIUdgiML3t30EqQ1RCep0sExatK/pub?output=csv")
+```
+
+```{r}
+names(df)
+```
+
+```{r}
+dlookr::diagnose(df)
+```
+
+# EDA
+
+How many papers
+
+```{r}
+n_distinct(df$TITLE)
+```
+
+Patients
+
+```{r}
+df %>% 
+  ggplot(aes(x = `Number of patients`)) + 
+  geom_histogram(bins = 6)
+```
+
+How many patients
+
+```{r}
+summary(df$`Number of patients`)
+```
+
+Males and females
+
+```{r}
+df %>% 
+  pivot_longer(`Males reported`:`Females reported`, 
+               names_to = "sex", 
+               values_to = "sex_values") %>% 
+  ggplot(aes(x = sex_values)) + 
+  geom_histogram(bins = 6) + 
+  facet_grid(sex ~ .)
+```
+
+Year of publication
+
+```{r}
+df %>% 
+  ggplot(aes(x = `YEAR published`)) + 
+  geom_histogram(bins = 10)
+```
+
+Age of the patients
+
+```{r}
+df %>% 
+  ggplot(aes(Age)) + 
+  geom_histogram(bins = 10)
+```
+
+Age of the patients by sex
+
+```{r}
+df %>% 
+  pivot_longer(`Males reported`:`Females reported`, 
+               names_to = "sex", 
+               values_to = "sex_values") %>% 
+  ggplot(aes(y = sex_values, 
+             x = Age, 
+             color = sex)) + 
+  geom_jitter(alpha = .7) + 
+  facet_grid(sex ~ . )
+```
+
+```{r}
+df %>% 
+  pivot_longer(`Males reported`:`Females reported`, 
+               names_to = "sex", 
+               values_to = "sex_values") %>% 
+  ggplot(aes(y = Age, 
+             x = sex)) + 
+  geom_boxplot(alpha = .7) + 
+  geom_jitter(alpha = .2, width = .2)
+```
