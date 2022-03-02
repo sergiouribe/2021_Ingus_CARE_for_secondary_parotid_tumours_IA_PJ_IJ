@@ -47,6 +47,13 @@ df <- df %>%
   mutate(JOURNAL = str_replace(JOURNAL, "Resaerch", "Research")) 
 ```
 
+```{r}
+df %>% 
+  filter(str_detect(JOURNAL, "Otolaryngology")) %>% 
+  tabyl(JOURNAL)
+
+```
+
 # EDA
 
 How many papers
