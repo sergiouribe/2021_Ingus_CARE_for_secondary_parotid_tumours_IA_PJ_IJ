@@ -1,6 +1,8 @@
 ---
 title: "CARE secondary parotid tumours"
 output: html_notebook
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r}
@@ -38,12 +40,25 @@ names(df)
 dlookr::diagnose(df)
 ```
 
+```{r}
+df <- df %>%
+  mutate(JOURNAL = str_to_title(JOURNAL)) %>% # change the capitalization
+  mutate(JOURNAL = str_trim(JOURNAL, side = c("both"))) %>% # remove spaces
+  mutate(JOURNAL = str_replace(JOURNAL, "Resaerch", "Research")) 
+```
+
 # EDA
 
 How many papers
 
 ```{r}
 n_distinct(df$TITLE)
+```
+
+From how many journals?
+
+```{r}
+n_distinct(df$JOURNAL)
 ```
 
 Patients
@@ -67,7 +82,9 @@ df %>%
   pivot_longer(`Males reported`:`Females reported`, 
                names_to = "sex", 
                values_to = "sex_values") %>% 
-  ggplot(aes(x = sex_values)) + 
+  ggplot(aes(x = sex_values, 
+             fill = "sex")) + 
+               
   geom_histogram(bins = 6) + 
   facet_grid(sex ~ .)
 ```
@@ -173,3 +190,13 @@ findFreqTerms(dtm, lowfreq = 4)
 ```{r}
 findAssocs(dtm, terms = "primary", corlimit = 0.4)
 ```
+
+# Ingus 1 march 2022
+
+I: Agreement between Ingus and Peteris
+
+S: what is the quality of the reports?
+
+I: what is the quality before and after 2015
+
+I: difference between journals
