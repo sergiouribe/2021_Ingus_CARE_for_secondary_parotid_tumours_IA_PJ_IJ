@@ -191,6 +191,11 @@ findFreqTerms(dtm, lowfreq = 4)
 findAssocs(dtm, terms = "primary", corlimit = 0.4)
 ```
 
+```{r}
+df %>% 
+  tabyl(Reviewer)
+```
+
 # Ingus 1 march 2022
 
 I: Agreement between Ingus and Peteris
