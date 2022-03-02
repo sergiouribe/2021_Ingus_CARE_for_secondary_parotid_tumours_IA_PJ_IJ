@@ -196,6 +196,15 @@ df %>%
   tabyl(Reviewer)
 ```
 
+papers by journals
+
+```{r}
+df %>% 
+  mutate(JOURNAL = fct_lump_min(JOURNAL, 4)) %>% 
+  count(JOURNAL) %>% 
+  arrange(desc(n))
+```
+
 # Ingus 1 march 2022
 
 I: Agreement between Ingus and Peteris
