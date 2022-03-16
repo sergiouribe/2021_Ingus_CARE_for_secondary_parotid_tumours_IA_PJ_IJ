@@ -5,10 +5,16 @@ editor_options:
   chunk_output_type: inline
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
 ```{r}
 pacman::p_load(tidyverse, 
                gtsummary,
                dlookr, 
+               DescTools, # for agreement
+               irr, # for agreement
                janitor)
 ```
 
@@ -36,6 +42,12 @@ df <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRKPzFe2lbF87DNe
 names(df)
 ```
 
+For the wordcloud later
+
+```{r}
+text <- df$`Copy and paste the abstract`
+```
+
 ```{r}
 dlookr::diagnose(df)
 ```
@@ -44,17 +56,61 @@ dlookr::diagnose(df)
 df <- df %>%
   mutate(JOURNAL = str_to_title(JOURNAL)) %>% # change the capitalization
   mutate(JOURNAL = str_trim(JOURNAL, side = c("both"))) %>% # remove spaces
-  mutate(JOURNAL = str_replace(JOURNAL, "Resaerch", "Research")) 
+  mutate(JOURNAL = str_replace(JOURNAL, "Resaerch", "Research"))  %>% 
+  mutate(JOURNAL = str_replace(JOURNAL, "Otolaryngology-Head And Neck Surgery", "Otolaryngology–Head And Neck Surgery")) %>% 
+  mutate(JOURNAL = str_replace(JOURNAL, "Otolaryngology–Head And Neck Surgery", "Archives Of Otolaryngology--Head & Neck Surgery")) %>%
+  mutate(JOURNAL = str_replace(JOURNAL, "The Journal Of Laryngology & Otology", "The Journal Of Laryngology And Otology"))
 ```
+
+# Check agreement
+
+How many raters?
 
 ```{r}
 df %>% 
-  filter(str_detect(JOURNAL, "Otolaryngology")) %>% 
-  tabyl(JOURNAL)
+  tabyl(Reviewer)
+```
 
+## Kappa
+
+```{r}
+df %>% 
+  select(Reviewer, ID,  `CARE Appraisal [Abstract 3b Main symptoms and/or important clinical findings]`:`CARE Appraisal [Key Words 2 2 to 5 key words that identify diagnoses or interventions in this case report, including "case report"]`) %>% # leave only the relevant columns
+  filter(Reviewer != "SU") %>%  # remove SU from the rater 
+  
+  # now reshape the dataset to obtain three columns
+  pivot_longer(-c(Reviewer, ID), 
+               names_to = "Care_item", 
+               values_to = "Care_values") %>% 
+  select(-c(Care_item)) %>% 
+  
+  # now reshape again to obtains the values per rater
+  pivot_wider(id_cols = ID, 
+              names_from = Reviewer, 
+              values_from = Care_values) %>% 
+  tidyr::unnest() %>%  # this is to recover the values, check shorturl.at/gpAG3 
+  filter(!is.na(IA)) %>% 
+  filter(!is.na(PJ)) %>% 
+  select(-ID) %>% 
+  kappam.fleiss(., detail=TRUE)
+```
+
+**The kappa between the rater is .715**
+
+Since they are comparable, I will leave only one + SU
+
+```{r}
+df <- df %>% 
+  filter(Reviewer %in% c('IA', 'SU'))
 ```
 
 # EDA
+
+```{r}
+df %>% 
+  select(Reviewer, JOURNAL, `YEAR published`, `Country of the correspondence author`, `Number of patients`) %>% 
+DescTools::Desc()
+```
 
 How many papers
 
@@ -68,7 +124,16 @@ From how many journals?
 n_distinct(df$JOURNAL)
 ```
 
-Patients
+List of journals with at least 3 articles
+
+```{r}
+df %>% 
+  mutate(JOURNAL = fct_lump_min(JOURNAL, min = 3)) %>% 
+  count(JOURNAL) %>% 
+  arrange(desc(n))
+```
+
+Patients distribution by paper
 
 ```{r}
 df %>% 
@@ -93,7 +158,8 @@ df %>%
              fill = "sex")) + 
                
   geom_histogram(bins = 6) + 
-  facet_grid(sex ~ .)
+  facet_grid(sex ~ .) + 
+  theme(legend.position="none")
 ```
 
 Year of publication
@@ -123,7 +189,8 @@ df %>%
              x = Age, 
              color = sex)) + 
   geom_jitter(alpha = .7) + 
-  facet_grid(sex ~ . )
+  facet_grid(sex ~ . ) +
+  theme(legend.position="none")
 ```
 
 ```{r}
@@ -135,13 +202,52 @@ df %>%
              x = sex, 
              color = sex)) + 
   geom_boxplot(alpha = .7) + 
-  geom_jitter(alpha = .2, width = .2)
+  geom_jitter(alpha = .2, width = .2) +
+  theme(legend.position="none")
+```
+
+# CARE ANALYSIS
+
+Convert the answers to points
+
+Yes = 1
+
+Unclear = .1
+
+No = 0
+
+```{r}
+df <- df %>% 
+  select(-c(TITLE, Reviewer, `Laika zīmogs`, 
+            AUTHORS, `Copy and paste the abstract`, 
+            Comments)) %>% 
+  # reshape the dataset
+  pivot_longer(contains("CARE"), 
+               names_to = "CARE_item", 
+               values_to = "CARE_value") %>% 
+  # create a new column with the values of CARE
+  mutate(CARE_value_num = case_when(
+    CARE_value == "Yes" ~ "1", 
+    CARE_value == "Unclear" ~ "0.1", 
+    TRUE ~ "O"
+  ))
+```
+
+Table 1
+
+Compliance per CARE item
+
+```{r}
+df %>% 
+  select(CARE_item, CARE_value) %>% 
+  mutate(CARE_item = fct_inorder(CARE_item)) %>% # reorder by appeareance
+  gtsummary::tbl_summary(by = CARE_value)
 ```
 
 # Wordcloud
 
 ```{r}
-text <- df$`Copy and paste the abstract`
+
 docs <- Corpus(VectorSource(text))
 ```
 
@@ -190,17 +296,10 @@ wordcloud(
 )
 ```
 
-```{r}
-findFreqTerms(dtm, lowfreq = 4)
-```
+Which terms are correlated?
 
 ```{r}
-findAssocs(dtm, terms = "primary", corlimit = 0.4)
-```
-
-```{r}
-df %>% 
-  tabyl(Reviewer)
+findAssocs(dtm, terms = "primary", corlimit = 0.3)
 ```
 
 papers by journals
@@ -215,6 +314,8 @@ df %>%
 # Ingus 1 march 2022
 
 I: Agreement between Ingus and Peteris
+
+0.75
 
 S: what is the quality of the reports?
 
