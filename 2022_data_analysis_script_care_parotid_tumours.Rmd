@@ -13,6 +13,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 pacman::p_load(tidyverse, 
                gtsummary,
                dlookr, 
+               santoku, # to break variables
                DescTools, # for agreement
                irr, # for agreement
                janitor)
@@ -141,10 +142,16 @@ df %>%
   geom_histogram(bins = 6)
 ```
 
-How many patients
+How many patients per paper
 
 ```{r}
 summary(df$`Number of patients`)
+```
+
+How many patients in total
+
+```{r}
+sum(df$`Number of patients`)
 ```
 
 Males and females
@@ -229,7 +236,7 @@ df <- df %>%
   mutate(CARE_value_num = case_when(
     CARE_value == "Yes" ~ "1", 
     CARE_value == "Unclear" ~ "0.1", 
-    TRUE ~ "O"
+    TRUE ~ "0"
   ))
 ```
 
@@ -241,7 +248,83 @@ Compliance per CARE item
 df %>% 
   select(CARE_item, CARE_value) %>% 
   mutate(CARE_item = fct_inorder(CARE_item)) %>% # reorder by appeareance
-  gtsummary::tbl_summary(by = CARE_value)
+  gtsummary::tbl_summary(by = CARE_value, 
+                         percent = "row") %>% 
+  modify_header(update = list(
+  label ~ '**Characteristic**',
+  stat_1 ~ '**No**',
+  stat_2 ~ '**Unclear**',
+  stat_3 ~ '**Yes**'
+))
+```
+
+Calculate the average quality per paper
+
+```{r}
+df_sum <- df %>%
+  janitor::clean_names() %>% # convert the names
+  mutate(care_value_num = as.double(care_value_num)) %>%  # change from chr to int
+  select(id, care_item, care_value_num) %>% # select only some columns. Later need to join
+  # reshapre the dataset
+  pivot_wider(names_from = "care_item",
+              values_from = "care_value_num") %>%
+  relocate(id, .after = last_col()) %>% 
+  rowwise() %>% 
+  mutate(care_sum = sum(c_across(starts_with("care"))), .keep = "all") %>% 
+  ungroup() %>% 
+  select(ID = id, care_sum)
+  
+  
+```
+
+Now merge the df_sum
+
+```{r}
+df <- left_join(df, df_sum, by = "ID")
+```
+
+Remove the df_sum
+
+```{r}
+rm(df_sum)
+```
+
+Calculate the average quality per year
+
+```{r}
+df %>%
+  # reshape
+  mutate(Decade = floor(`YEAR published` / 10) * 10) %>%
+  # mutate(Decade = santoku::chop(`YEAR published`, c(1969, 1979, 1989, 1999, 2009, 2019))) %>%
+  pivot_wider(names_from = CARE_item,
+              values_from = CARE_value) %>%
+  distinct(., ID, .keep_all = TRUE) %>%  # filter unique IDs
+  select(ID, Decade, care_sum) %>%
+  ggplot(aes(x = as.factor(Decade),
+             y = care_sum)) +
+  geom_jitter(color = "grey90") +
+  geom_boxplot(width = .2, color = "grey60") +
+  geom_violin(width = .9, fill = NA) +
+  labs(
+    title = "Average CARE compliance per decade",
+    subtitle = "Median and 25%−75% Quartiles\nDotted line in 2013 marks the publication of the CARE guidelines",
+    y = "CARE Compliance",
+    x = "Decade"
+  ) +
+  geom_vline(
+    aes(xintercept = 5.3), linetype = "dashed", colour = "red", size = 0.5)
+```
+
+Papers published by Journal
+
+```{r}
+df %>%
+  # reshape
+  mutate(Decade = floor(`YEAR published` / 10) * 10) %>%
+  # mutate(Decade = santoku::chop(`YEAR published`, c(1969, 1979, 1989, 1999, 2009, 2019))) %>%
+  pivot_wider(names_from = CARE_item,
+              values_from = CARE_value) %>%
+  distinct(., ID, .keep_all = TRUE) %>%  # filter unique IDs
 ```
 
 # Wordcloud
