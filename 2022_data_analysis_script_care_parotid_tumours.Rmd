@@ -315,16 +315,31 @@ df %>%
     aes(xintercept = 5.3), linetype = "dashed", colour = "red", size = 0.5)
 ```
 
-Papers published by Journal
+Papers published by Year
 
 ```{r}
 df %>%
-  # reshape
-  mutate(Decade = floor(`YEAR published` / 10) * 10) %>%
-  # mutate(Decade = santoku::chop(`YEAR published`, c(1969, 1979, 1989, 1999, 2009, 2019))) %>%
-  pivot_wider(names_from = CARE_item,
-              values_from = CARE_value) %>%
-  distinct(., ID, .keep_all = TRUE) %>%  # filter unique IDs
+
+  distinct(., ID, .keep_all = TRUE) %>%   # filter unique IDs
+  ggplot(aes(x = `YEAR published`)) + 
+  geom_histogram(bins = 10, fill = "grey50")
+  
+```
+
+By country
+
+```{r}
+df %>%
+
+  distinct(., ID, .keep_all = TRUE) %>%   # filter unique IDs
+  mutate(`Country of the correspondence author` = fct_lump_min(`Country of the correspondence author`, min = 7)) %>% 
+  ggplot(aes(x = `YEAR published`)) + 
+  geom_histogram(bins = 8, fill = "grey50") +
+  facet_grid( `Country of the correspondence author` ~  .) + 
+  labs(title = "Publications by corresponding author country", 
+       x = "Year", 
+       y = "Publications")
+  
 ```
 
 # Wordcloud
