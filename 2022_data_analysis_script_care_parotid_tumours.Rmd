@@ -338,8 +338,47 @@ df %>%
   facet_grid( `Country of the correspondence author` ~  .) + 
   labs(title = "Publications by corresponding author country", 
        x = "Year", 
-       y = "Publications")
+       y = "Publications (log adjusted scale)") + 
+  scale_y_log10()
   
+```
+
+## create a new CARE simplified name items
+
+```{r}
+df <- df %>% 
+  mutate(CARE_name_simple = case_when(
+    str_detect(CARE_item,"Title 1 The diagnosis")  ~ "01 Title", 
+    str_detect(CARE_item,"Key Words 2 2 to 5 key") ~ "02 Keywords",
+    str_detect(CARE_item,"Abstract 3") ~ "03 Abstract", 
+    str_detect(CARE_item,"Introduction 4") ~ "04 Introduction",
+    str_detect(CARE_item,"5") ~ "05 Patient Information",
+    str_detect(CARE_item,"6") ~ "06 Clinical Findings",
+    str_detect(CARE_item,"7") ~ "07 Timeline",
+    str_detect(CARE_item,"8") ~ "08 Diagnostic Assessment",
+    str_detect(CARE_item,"9") ~ "09 Therapeutic Intervention",
+    str_detect(CARE_item,"10") ~ "10 Follow-up and Outcomes",
+    str_detect(CARE_item,"11") ~ "11 Discussion",
+    str_detect(CARE_item,"12") ~ "12 Patient Perspective",
+    TRUE ~ "13 Informed Consent"
+  )) 
+```
+
+## Count CARE new items
+
+```{r}
+df %>% 
+  mutate(CARE_value = fct_relevel(CARE_value, "Yes", "Unclear")) %>%
+  select(CARE_name_simple, CARE_value) %>% 
+  group_by(CARE_name_simple, CARE_value) %>% 
+  # count() %>% 
+  gtsummary::tbl_summary(by = CARE_value) %>% 
+  modify_header(update = list(
+  label ~ '**Characteristic**',
+  stat_1 ~ '**Yes**',
+  stat_2 ~ '**Unclear**',
+  stat_3 ~ '**No**'
+))
 ```
 
 # Wordcloud
