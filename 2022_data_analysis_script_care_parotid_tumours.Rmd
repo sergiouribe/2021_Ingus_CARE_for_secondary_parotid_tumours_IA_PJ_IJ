@@ -1,6 +1,14 @@
 ---
 title: "CARE secondary parotid tumours"
-output: html_notebook
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: no
+    code_folding: hide
+  pdf_document:
+    toc: yes
 editor_options: 
   chunk_output_type: inline
 ---
@@ -12,7 +20,10 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```{r}
 pacman::p_load(tidyverse, 
                gtsummary,
+               ggcharts , # see https://thomas-neitmann.github.io/ggcharts/reference/dumbbell_chart.html
                dlookr, 
+               scales, # for the % scales in ggplot2
+               patchwork, # for multiple plots
                santoku, # to break variables
                DescTools, # for agreement
                irr, # for agreement
@@ -105,27 +116,52 @@ df <- df %>%
   filter(Reviewer %in% c('IA', 'SU'))
 ```
 
-# EDA
+## add a continent column
 
 ```{r}
-df %>% 
-  select(Reviewer, JOURNAL, `YEAR published`, `Country of the correspondence author`, `Number of patients`) %>% 
-DescTools::Desc()
+countries <- read_csv("https://raw.githubusercontent.com/dbouquin/IS_608/master/NanosatDB_munging/Countries-Continents.csv")
+glimpse(countries)
 ```
 
-How many papers
+```{r}
+df <- df %>% 
+  mutate(`Country of the correspondence author` = (str_replace_all(`Country of the correspondence author`, "United States", "US"))) %>% 
+left_join(., countries, by = c("Country of the correspondence author" = "Country")) %>%
+  mutate(Continent = case_when(
+    `Country of the correspondence author` == "Taiwan" ~ "Asia", 
+    `Country of the correspondence author` == "Australia" ~ "Oceania",
+    `Country of the correspondence author` == "Canada" ~ "North America",
+    `Country of the correspondence author` == "China" ~ "Asia",
+    `Country of the correspondence author` == "India" ~ "Asia",
+    `Country of the correspondence author` == "Japan" ~ "Asia",
+    `Country of the correspondence author` == "Israel" ~ "Asia",
+    `Country of the correspondence author` == "Kuwait" ~ "Asia",
+    `Country of the correspondence author` == "Morocco" ~ "Africa",
+    `Country of the correspondence author` == "Qatar" ~ "Asia",
+    `Country of the correspondence author` == "Tunisia" ~ "Africa",
+    TRUE ~ "Europe"
+  )) 
+```
+
+```{r}
+rm(countries)
+```
+
+# EDA
+
+### How many papers
 
 ```{r}
 n_distinct(df$TITLE)
 ```
 
-From how many journals?
+### From how many journals?
 
 ```{r}
 n_distinct(df$JOURNAL)
 ```
 
-List of journals with at least 3 articles
+### List of journals with at least 3 articles
 
 ```{r}
 df %>% 
@@ -134,7 +170,7 @@ df %>%
   arrange(desc(n))
 ```
 
-Patients distribution by paper
+### Patients distribution by paper
 
 ```{r}
 df %>% 
@@ -142,19 +178,19 @@ df %>%
   geom_histogram(bins = 6)
 ```
 
-How many patients per paper
+### How many patients per paper
 
 ```{r}
 summary(df$`Number of patients`)
 ```
 
-How many patients in total
+### How many patients in total
 
 ```{r}
 sum(df$`Number of patients`)
 ```
 
-Males and females
+### Males and females
 
 ```{r}
 df %>% 
@@ -169,7 +205,7 @@ df %>%
   theme(legend.position="none")
 ```
 
-Year of publication
+### Year of publication
 
 ```{r}
 df %>% 
@@ -177,7 +213,7 @@ df %>%
   geom_histogram(bins = 10)
 ```
 
-Age of the patients
+### Age of the patients
 
 ```{r}
 df %>% 
@@ -185,7 +221,7 @@ df %>%
   geom_histogram(bins = 10)
 ```
 
-Age of the patients by sex
+### Age of the patients by sex
 
 ```{r}
 df %>% 
@@ -211,6 +247,31 @@ df %>%
   geom_boxplot(alpha = .7) + 
   geom_jitter(alpha = .2, width = .2) +
   theme(legend.position="none")
+```
+
+### Age by Continent
+
+```{r}
+df %>% 
+  distinct_at(vars(ID), .keep_all = TRUE) %>% # filter unique values
+  ggplot(aes(x = fct_reorder(Continent, Age, .fun = median), 
+             y = Age)) + 
+  geom_boxplot() + 
+  geom_jitter(alpha = .1, width = 0.2)
+```
+
+### Case reports by continent
+
+```{r}
+df %>% 
+  distinct_at(vars(ID), .keep_all = TRUE) %>% # filter unique values
+  group_by(Continent, `YEAR published`) %>% 
+  ggplot(aes(x = `YEAR published`, 
+             y = `Number of patients`, 
+             color = Continent))  +
+  geom_jitter(alpha = .4) + 
+  scale_y_log10() + 
+  facet_grid(. ~ Continent)
 ```
 
 # CARE ANALYSIS
@@ -240,7 +301,7 @@ df <- df %>%
   ))
 ```
 
-Table 1
+## TABLE 1 CARE items compliance
 
 Compliance per CARE item
 
@@ -283,11 +344,20 @@ Now merge the df_sum
 df <- left_join(df, df_sum, by = "ID")
 ```
 
+Convert the CARE_num_vale to num
+
+```{r}
+df <- df %>% 
+  mutate(CARE_value_num = as.double(CARE_value_num))
+```
+
 Remove the df_sum
 
 ```{r}
 rm(df_sum)
 ```
+
+## FIGURE 4 CARE score by year 
 
 Calculate the average quality per year
 
@@ -315,32 +385,58 @@ df %>%
     aes(xintercept = 5.3), linetype = "dashed", colour = "red", size = 0.5)
 ```
 
-Papers published by Year
+### Quality by continent
 
 ```{r}
 df %>%
-
-  distinct(., ID, .keep_all = TRUE) %>%   # filter unique IDs
-  ggplot(aes(x = `YEAR published`)) + 
-  geom_histogram(bins = 10, fill = "grey50")
+  distinct_at(vars(ID), .keep_all = TRUE) %>% # filter unique values, since there is the care_sum for each id 
+  ggplot(aes(x = fct_reorder(Continent, care_sum), 
+             y = care_sum)) + 
+  geom_boxplot() + 
+  geom_jitter(alpha = .1) + 
+  labs(title = "CARE Compliance by Continent", 
+       x = "Continent", 
+       y = "CARE score")
   
 ```
 
-By country
+But keep in mind the n for each continent
+
+```{r}
+df %>%
+  distinct_at(vars(ID), .keep_all = TRUE) %>% # filter unique values, since there is the care_sum for each id 
+  group_by(Continent) %>% 
+  summarise(n = n(), "Mean" = mean(care_sum), "sd" = sd(care_sum), min = min(care_sum), max = max(care_sum)) %>% 
+  mutate_if(is.numeric, round, 1)
+```
+
+### Papers published by Year
 
 ```{r}
 df %>%
 
   distinct(., ID, .keep_all = TRUE) %>%   # filter unique IDs
-  mutate(`Country of the correspondence author` = fct_lump_min(`Country of the correspondence author`, min = 7)) %>% 
   ggplot(aes(x = `YEAR published`)) + 
-  geom_histogram(bins = 8, fill = "grey50") +
-  facet_grid( `Country of the correspondence author` ~  .) + 
-  labs(title = "Publications by corresponding author country", 
+  geom_histogram(bins = 10, fill = "grey50") + 
+  labs(title = "Case reports publishes by year", 
        x = "Year", 
-       y = "Publications (log adjusted scale)") + 
-  scale_y_log10()
+       y = "Articles")
   
+```
+
+### papers publishes by year by continent
+
+```{r}
+df %>%
+  distinct(., ID, .keep_all = TRUE) %>%   # filter unique IDs
+  ggplot(aes(x = `YEAR published`, 
+             fill = Continent)) +
+  geom_histogram(bins = 8) +
+  facet_grid(Continent ~  .) +
+  labs(title = "Publications by Corresponding Author Country",
+       x = "Year",
+       y = "Publications") +
+  theme(legend.position="none")
 ```
 
 ## create a new CARE simplified name items
@@ -372,7 +468,8 @@ df %>%
   select(CARE_name_simple, CARE_value) %>% 
   group_by(CARE_name_simple, CARE_value) %>% 
   # count() %>% 
-  gtsummary::tbl_summary(by = CARE_value) %>% 
+  gtsummary::tbl_summary(by = CARE_value, 
+                         percent = "row") %>% 
   modify_header(update = list(
   label ~ '**Characteristic**',
   stat_1 ~ '**Yes**',
@@ -381,15 +478,224 @@ df %>%
 ))
 ```
 
+# Analysis before and after 2013
+
+Create a new var indicating if before or after
+
+```{r}
+df <- df %>% 
+  mutate(moment = case_when(
+    `YEAR published` < 2013 ~ "Before", 
+    TRUE ~"After"
+  )) 
+```
+
+## Table 3
+
+Now compare before and after
+
+```{r}
+df %>% 
+  mutate(Continent = fct_relevel(Continent, "Europe")) %>% # since europe is the main continent, I will left as baseline
+  mutate(moment = fct_relevel(moment, "Before")) %>% # before is the baseline
+  distinct_at(vars(ID), .keep_all = TRUE) %>% # filter unique values
+  mutate(Continent = fct_lump_min(Continent, min = 3)) %>%  # since there are soo few papers in others continents, Let's lump them
+  mutate(JOURNAL = fct_lump_min(JOURNAL, min = 3)) %>% 
+  mutate(JOURNAL = fct_relevel(JOURNAL, "Other")) %>% 
+  rename("Moment" = "moment") %>% 
+  with(lm(care_sum ~ Moment + JOURNAL + Continent)) %>% 
+  gtsummary::tbl_regression() %>% 
+  gtsummary::add_n(location = "level") %>% 
+  gtsummary::bold_labels()
+
+```
+
+## Analysis per item before/after
+
+```{r}
+df %>% 
+  pivot_wider(names_from = CARE_item, 
+              values_from = CARE_value) %>% 
+  distinct_at(vars(ID), .keep_all = TRUE) %>%  # filter unique values
+  group_by(ID, moment) %>% 
+  group_by(moment) %>% 
+  summarise(n = n(), mean = mean(care_sum), sd = sd(care_sum)) %>% 
+  mutate_if(is.numeric, round, 1)
+```
+
+## Main table CARE compliance
+
+```{r}
+df %>% 
+  # reorder the CARE names
+  mutate(CARE_name_simple = fct_inorder(CARE_name_simple)) %>%
+  # select only relevant columns
+  select(ID,  moment, CARE_name_simple, CARE_value) %>%
+  # summarise the data
+  group_by(CARE_name_simple, CARE_value) %>%
+  summarise(n = n()) %>%
+  # calculate the proportion
+  mutate(freq = n / sum(n)) %>% 
+  select(-n) %>% 
+  mutate(freq = freq * 100) %>% 
+  pivot_wider(names_from = CARE_value, 
+              values_from = freq, 
+              values_fill = 0) %>% 
+  mutate_if(is.numeric, round, 1) %>% 
+  relocate("Yes", .after = CARE_name_simple) %>% 
+  relocate("Unclear", .after = "Yes")
+```
+
+### By raw scores
+
+```{r}
+df %>% 
+  mutate(CARE_name_simple = fct_inorder(CARE_name_simple)) %>%
+  select(ID,  moment, CARE_name_simple, CARE_value) %>%
+  group_by(CARE_name_simple, CARE_value) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>% 
+  ggplot(aes(x = fct_rev(CARE_name_simple), 
+             y = n, 
+             fill = CARE_value)) + 
+  geom_col(position = "fill") + 
+  scale_fill_manual(values = c("#cc3232", "#e7b416", "#2dc937")) +
+  coord_flip() + 
+  labs(title = "CARE Items Compliance (Raw scores)", 
+       x = "CARE Item", 
+       y = "Percentage", 
+       fill = "Compliance") +
+  scale_y_continuous(labels = label_percent())
+  
+  
+  
+  
+
+  
+  
+  
+```
+
+### By percentages
+
+```{r}
+df %>% 
+  mutate(CARE_name_simple = fct_inorder(CARE_name_simple)) %>%
+  select(ID,  moment, CARE_name_simple, CARE_value) %>%
+  group_by(CARE_name_simple, CARE_value) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n)) %>% 
+  ggplot(aes(x = fct_rev(CARE_name_simple), 
+             y = freq, 
+             fill = CARE_value)) + 
+  geom_col(position = "fill") + 
+  scale_fill_manual(values = c("#cc3232", "#e7b416", "#2dc937")) +
+  coord_flip() + 
+  labs(title = "CARE Items Compliance (%)", 
+       x = "CARE Item", 
+       y = "Percentage", 
+       fill = "Compliance") +
+  scale_y_continuous(labels = label_percent())
+```
+
+## Change before and after
+
+```{r}
+df %>% 
+  # reorder the CARE names
+  mutate(CARE_name_simple = fct_inorder(CARE_name_simple)) %>%
+  # select only relevant columns
+  select(ID,  moment, CARE_name_simple, CARE_value) %>%
+  # summarise the data
+  group_by(CARE_name_simple, CARE_value, moment) %>%
+  summarise(n = n()) %>%
+  mutate(moment = fct_relevel(moment, c("Before", "After"))) %>% 
+  mutate(CARE_value = fct_relevel(CARE_value, c("Yes", "Unclear", "No"))) %>% 
+  pivot_wider(names_from = moment, 
+              values_from = n, 
+              values_fill = FALSE) %>% 
+  mutate(suma = Before + After) %>% 
+  mutate(Before = Before / suma * 100) %>% 
+  mutate(After = After / suma * 100) %>% 
+  ungroup() %>% 
+  select(-c(suma)) %>% 
+  mutate_if(is.numeric, round, 1) %>% 
+  filter(CARE_value == "Yes") %>% 
+  
+  # pivoting to long
+  pivot_longer(Before:After, 
+               names_to = "moment", 
+               values_to = "moment_values") %>% 
+  mutate(moment = fct_relevel(moment, c("Before"))) %>% 
+
+  ggplot(aes(x = fct_rev(CARE_name_simple), 
+             y = moment_values, 
+             color = moment)) + 
+  geom_point() + 
+  coord_flip() +
+  labs(title = "Change in percentage of compliance\n(CARE = Yes) before and after 2013", 
+       x = "CARE Items", 
+       y = "Compliance percentage", 
+       color = "Moment")  +
+  theme(legend.position="top")
+  
+  
+  
+  
+  
+  
+```
+
+```{r}
+df %>%
+  # reorder the CARE names
+  mutate(CARE_name_simple = fct_inorder(CARE_name_simple)) %>%
+  # select only relevant columns
+  select(ID,  moment, CARE_name_simple, CARE_value) %>%
+  # summarise the data
+  group_by(CARE_name_simple, CARE_value, moment) %>%
+  summarise(n = n()) %>%
+  # calculate the proportion
+  mutate(freq = n / sum(n)) %>%
+  select(-n) %>%
+  mutate(freq = freq * 100) %>%
+  mutate(moment = fct_relevel(moment, c("Before"))) %>%
+  filter(CARE_value == "Yes")  %>%
+  ungroup() %>%
+  select(-CARE_value) %>% 
+  pivot_wider(names_from = moment, 
+              values_from = freq, 
+              values_fill = FALSE) %>% 
+  relocate(Before, .after = CARE_name_simple) %>% 
+  ggplot() +
+  geom_segment(aes(
+    x = fct_rev(CARE_name_simple),    xend = CARE_name_simple,
+    y = Before,    yend = After  ), color = "grey") +
+  
+  geom_point(aes(x = CARE_name_simple, y = Before),
+             color = "green", size = 3) +
+  
+  geom_point(aes(x = CARE_name_simple, y = After), 
+             color = "red", size = 3) +  coord_flip() +
+  coord_flip() + 
+  labs(title = "Change in percentage of compliance\n(CARE = Yes) before and after 2013", 
+       x = "CARE Items") 
+  
+
+
+
+
+```
+
 # Wordcloud
 
 ```{r}
 
-docs <- Corpus(VectorSource(text))
+ docs <- Corpus(VectorSource(text))
 ```
 
 ```{r}
-docs <- docs %>%
+ docs <- docs %>%
   tm_map(removeNumbers) %>%
   tm_map(removePunctuation) %>%
   tm_map(stripWhitespace)
@@ -397,32 +703,32 @@ docs <- docs %>%
 
 ```{r}
 # Convert the text to lower case
-docs <- tm_map(docs, content_transformer(tolower))
+ docs <- tm_map(docs, content_transformer(tolower))
 # Remove numbers
-docs <- tm_map(docs, removeNumbers)
+ docs <- tm_map(docs, removeNumbers)
 # Remove english common stopwords
-docs <- tm_map(docs, removeWords, stopwords("english"))
+ docs <- tm_map(docs, removeWords, stopwords("english"))
 # specify your stopwords as a character vector
-docs <- tm_map(docs, removeWords, c("keywords")) 
+ docs <- tm_map(docs, removeWords, c("keywords")) 
 # Remove punctuations
-docs <- tm_map(docs, removePunctuation)
+ docs <- tm_map(docs, removePunctuation)
 # Eliminate extra white spaces
-docs <- tm_map(docs, stripWhitespace)
+ docs <- tm_map(docs, stripWhitespace)
 # Text stemming
-# docs <- tm_map(docs, stemDocument)
+ docs <- tm_map(docs, stemDocument)
 ```
 
 ```{r}
-dtm <- TermDocumentMatrix(docs)
-m <- as.matrix(dtm)
-v <- sort(rowSums(m),decreasing=TRUE)
-d <- data.frame(word = names(v),freq=v)
-head(d, 10)
+ dtm <- TermDocumentMatrix(docs)
+ m <- as.matrix(dtm)
+ v <- sort(rowSums(m),decreasing=TRUE)
+ d <- data.frame(word = names(v),freq=v)
+ head(d, 10)
 ```
 
 ```{r}
-set.seed(1234)
-wordcloud(
+ set.seed(1234)
+ wordcloud(
   words = d$word,
   freq = d$freq,
   min.freq = 35,
@@ -430,22 +736,13 @@ wordcloud(
   random.order = TRUE,
   rot.per = 0.35,
   colors = brewer.pal(8, "Dark2")
-)
+ )
 ```
 
 Which terms are correlated?
 
 ```{r}
-findAssocs(dtm, terms = "primary", corlimit = 0.3)
-```
-
-papers by journals
-
-```{r}
-df %>% 
-  mutate(JOURNAL = fct_lump_min(JOURNAL, 4)) %>% 
-  count(JOURNAL) %>% 
-  arrange(desc(n))
+# findAssocs(dtm, terms = "primary", corlimit = 0.3)
 ```
 
 # Ingus 1 march 2022
@@ -456,6 +753,6 @@ I: Agreement between Ingus and Peteris
 
 S: what is the quality of the reports?
 
-I: what is the quality before and after 2015
+I: what is the quality before and after 2013
 
 I: difference between journals
