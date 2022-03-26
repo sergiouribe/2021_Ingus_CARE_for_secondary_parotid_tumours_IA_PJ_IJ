@@ -213,12 +213,30 @@ df %>%
   geom_histogram(bins = 10)
 ```
 
+```{r}
+df %>% 
+  mutate(Continent = fct_lump_min(Continent, min = 10)) %>% 
+  ggplot(aes(x = `YEAR published`, 
+             fill = Continent)) + 
+  geom_histogram(bins = 10) + 
+  facet_grid(Continent ~ . )
+```
+
 ### Age of the patients
 
 ```{r}
 df %>% 
   ggplot(aes(Age)) + 
   geom_histogram(bins = 10)
+```
+
+```{r}
+df %>%   
+  mutate(Continent = fct_lump_min(Continent, min = 10)) %>% 
+  ggplot(aes(x = Age, 
+             fill = Continent)) + 
+  geom_histogram(bins = 10) + 
+  facet_grid(Continent ~ . )
 ```
 
 ### Age of the patients by sex
@@ -357,7 +375,7 @@ Remove the df_sum
 rm(df_sum)
 ```
 
-## FIGURE 4 CARE score by year 
+## FIGURE 4 CARE score by year
 
 Calculate the average quality per year
 
